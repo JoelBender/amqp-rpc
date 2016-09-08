@@ -9,6 +9,7 @@ publish the response by sending it back to the client queue.
 """
 
 import amqp
+import time
 import uuid
 
 from argparse import ArgumentParser
@@ -87,69 +88,83 @@ parser.add_argument(
 args = parser.parse_args()
 print("args: %r" % (args,))
 
-# get a connection
-connection = amqp.Connection(
-    args.host,
-    userid=args.userid,
-    password=args.password,
-    ssl=args.ssl,
-    )
-print("connection: %r" % (connection,))
+connection = channel = request_queue = None
 
-# connect the connection
-# rslt = connection.connect()
-# print("connect: %r" % (rslt,))
+while True:
+    try:
+        # get a connection
+        connection = amqp.Connection(
+            args.host,
+            userid=args.userid,
+            password=args.password,
+            ssl=args.ssl,
+            )
+        print("connection: %r" % (connection,))
 
-# get a channel
-channel = connection.channel()
-print("channel: %r" % (channel,))
+        # connect the connection
+        rslt = connection.connect()
+        print("connect: %r" % (rslt,))
 
-# make an interesting (and unique) queue name
-queue_name = "rpc.client." + str(uuid.uuid1())
-print("queue_name: %r" % (queue_name,))
+        # get a channel
+        channel = connection.channel()
+        print("channel: %r" % (channel,))
 
-# create the queue for the response
-result_queue = channel.queue_declare(queue_name, exclusive=True)
-print("queue_declare: %r" % (result_queue,))
+        # make an interesting (and unique) queue name
+        queue_name = "rpc.client." + str(uuid.uuid1())
+        print("queue_name: %r" % (queue_name,))
 
-# call the callback for rpc responses
-rslt = channel.basic_consume(
-    queue_name,
-    callback=callback,
-    no_ack=args.noack,
-    )
-print("consuming, rslt: %r" % (rslt,))
+        # create the queue for the response
+        result_queue = channel.queue_declare(queue_name, exclusive=True)
+        print("queue_declare: %r" % (result_queue,))
 
-# request/response key
-correlation_id = str(uuid.uuid1())
-print("correlation_id: %r" % (correlation_id,))
+        # call the callback for rpc responses
+        rslt = channel.basic_consume(
+            queue_name,
+            callback=callback,
+            no_ack=args.noack,
+            )
+        print("basic_consume: %r" % (rslt,))
 
-# wrap it in a message
-msg = amqp.Message(
-    args.arg,
-    content_type='text/plain',
-    reply_to=queue_name,
-    correlation_id=correlation_id,
-    )
-print("msg: %r" % (msg,))
+        # request/response key
+        correlation_id = str(uuid.uuid1())
+        print("correlation_id: %r" % (correlation_id,))
 
-# publish it on the channel, sending it to the exchange
-rslt = channel.basic_publish(
-    msg,
-    exchange='',
-    routing_key=args.queue,
-    )
-print("basic_publish: %r" % (rslt,))
+        # wrap it in a message
+        msg = amqp.Message(
+            args.arg,
+            content_type='text/plain',
+            reply_to=queue_name,
+            correlation_id=correlation_id,
+            )
+        print("msg: %r" % (msg,))
 
-# loop for incoming RPC responses, ^C to quit
-try:
-    while channel.callbacks:
-        rslt = channel.wait()
-        print("wait: %r" % (rslt,))
-    print("done")
-except KeyboardInterrupt:
-    pass
+        # publish it on the channel, sending it to the exchange
+        rslt = channel.basic_publish(
+            msg,
+            exchange='',
+            routing_key=args.queue,
+            )
+        print("basic_publish: %r" % (rslt,))
+
+        # loop for incoming RPC requests, ^C to quit
+        while channel.callbacks:
+            rslt = connection.drain_events()
+            print("drain_events: %r" % (rslt,))
+
+        print("done")
+        break
+
+    except ConnectionError as err:
+        print("connection error: %r" % (err,))
+        time.sleep(5.0)
+    except amqp.exceptions.ConsumerCancelled:
+        print("consumer canceled")
+        break
+    except KeyboardInterrupt:
+        break
 
 # close down
-channel.close()
-connection.close()
+if channel:
+    channel.close()
+if connection:
+    connection.close()

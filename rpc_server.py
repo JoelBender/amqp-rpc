@@ -7,6 +7,7 @@ publishing its response to the queue that was provided by the client.
 """
 
 import amqp
+import time
 
 from argparse import ArgumentParser
 
@@ -110,59 +111,69 @@ parser.add_argument(
 args = parser.parse_args()
 print("args: %r" % (args,))
 
-# get a connection
-connection = amqp.Connection(
-    args.host,
-    userid=args.userid,
-    password=args.password,
-    ssl=args.ssl,
-    )
-print("connection: %r" % (connection,))
+connection = channel = request_queue = None
 
-# connect the connection?
-# rslt = connection.connect()
-# print("connect: %r" % (rslt,))
+while True:
+    try:
+        # get a connection
+        connection = amqp.Connection(
+            args.host,
+            userid=args.userid,
+            password=args.password,
+            ssl=args.ssl,
+            )
+        print("connection: %r" % (connection,))
 
-# get a channel
-channel = connection.channel()
-print("channel: %r" % (channel,))
+        # connect the connection
+        rslt = connection.connect()
+        print("connect: %r" % (rslt,))
 
-# create the queue for the requests
-request_queue = channel.queue_declare(
-    args.queue,
-    exclusive=False,
-    durable=args.durable,
-    auto_delete=args.auto_delete,
-    )
-print("queue_declare: %r" % (request_queue,))
+        # get a channel
+        channel = connection.channel()
+        print("channel: %r" % (channel,))
 
-# prefetch messages, no specific limit on size, but only one, and
-# only for this channel
-channel.basic_qos(
-    prefetch_size=0,
-    prefetch_count=1,
-    a_global=False,
-    )
+        # create the queue for the requests
+        request_queue = channel.queue_declare(
+            args.queue,
+            exclusive=False,
+            durable=args.durable,
+            auto_delete=args.auto_delete,
+            )
+        print("queue_declare: %r" % (request_queue,))
 
-# call the callback when consuming
-rslt = channel.basic_consume(
-    args.queue,
-    callback=callback,
-    no_ack=args.noack,
-    )
-print("basic_consume: %r" % (rslt,))
+        # prefetch messages, no specific limit on size, but only one, and
+        # only for this channel
+        rslt = channel.basic_qos(
+            prefetch_size=0,
+            prefetch_count=1,
+            a_global=False,
+            )
+        print("basic_qos: %r" % (rslt,))
 
-# loop for incoming RPC requests, ^C to quit
-try:
-    while True:
-        rslt = channel.wait()
-        print("wait: %r" % (rslt,))
-    print("done")
-except amqp.exceptions.ConsumerCancelled:
-    print("consumer canceled")
-except KeyboardInterrupt:
-    pass
+        # call the callback when consuming
+        rslt = channel.basic_consume(
+            args.queue,
+            callback=callback,
+            no_ack=args.noack,
+            )
+        print("basic_consume: %r" % (rslt,))
+
+        # loop for incoming RPC requests, ^C to quit
+        while True:
+            rslt = connection.drain_events()
+            print("drain_events: %r" % (rslt,))
+
+    except ConnectionError as err:
+        print("connection error: %r" % (err,))
+        time.sleep(5.0)
+    except amqp.exceptions.ConsumerCancelled:
+        print("consumer canceled")
+        break
+    except KeyboardInterrupt:
+        break
 
 # close down
-channel.close()
-connection.close()
+if channel:
+    channel.close()
+if connection:
+    connection.close()

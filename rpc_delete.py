@@ -8,7 +8,9 @@ each time the server is run, so if you want to change the parameters, you have
 to make sure there are no servers running and then delete the queue.
 """
 
+import sys
 import amqp
+import time
 
 from argparse import ArgumentParser
 
@@ -47,27 +49,42 @@ parser.add_argument(
 args = parser.parse_args()
 print("args: %r" % (args,))
 
-# get a connection
-connection = amqp.Connection(
-    args.host,
-    userid=args.userid,
-    password=args.password,
-    ssl=args.ssl,
-    )
-print("connection: %r" % (connection,))
+connection = channel = request_queue = None
 
-# connect the connection
-# rslt = connection.connect()
-# print("connect: %r" % (rslt,))
+for i in range(5):
+    try:
+        # get a connection
+        connection = amqp.Connection(
+            args.host,
+            userid=args.userid,
+            password=args.password,
+            ssl=args.ssl,
+            )
+        print("connection: %r" % (connection,))
 
-# get a channel
-channel = connection.channel()
-print("channel: %r" % (channel,))
+        # try to connect
+        rslt = connection.connect()
+        print("connect: %r" % (rslt,))
 
-# delete the queue
-result = channel.queue_delete(queue=args.queue)
-print("queue_delete: %r" % (result,))
+        # get a channel
+        channel = connection.channel()
+        print("channel: %r" % (channel,))
+
+        # delete the queue
+        result = channel.queue_delete(queue=args.queue)
+        print("queue_delete: %r" % (result,))
+
+        break
+
+    except ConnectionError as err:
+        print("connection error: %r" % (err,))
+        time.sleep(5.0)
+else:
+    print("no connection")
+    sys.exit(1)
 
 # close down
-channel.close()
-connection.close()
+if channel:
+    channel.close()
+if connection:
+    connection.close()
