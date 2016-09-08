@@ -10,9 +10,18 @@ to make sure there are no servers running and then delete the queue.
 
 import sys
 import amqp
+import socket
 import time
 
 from argparse import ArgumentParser
+
+try:
+    import exceptions
+
+    class ConnectionError(OSError):
+        pass
+except ImportError:
+    pass
 
 #
 #   __main__
@@ -78,6 +87,9 @@ for i in range(5):
 
     except ConnectionError as err:
         print("connection error: %r" % (err,))
+        time.sleep(5.0)
+    except socket.error as err:
+        print("socket error: %r" % (err,))
         time.sleep(5.0)
 else:
     print("no connection")
