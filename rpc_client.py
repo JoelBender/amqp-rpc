@@ -17,6 +17,7 @@ from argparse import ArgumentParser
 # globals
 args = None
 
+
 def callback(msg):
     """This function is called for each message in its queue."""
     global args
@@ -25,13 +26,13 @@ def callback(msg):
 
     print("    - properties...")
     for key, val in msg.properties.items():
-        print ('        - %s: %s' % (key, str(val)))
+        print("        - %s: %s" % (key, str(val)))
 
     print("    - delivery_info...")
     for key, val in msg.delivery_info.items():
-        print ('        - %s: %s' % (key, str(val)))
+        print("        - %s: %s" % (key, str(val)))
 
-    print('    - body: %r' % (msg.body,))
+    print("    - body: %r" % (msg.body,))
 
     if not args.noack:
         rslt = msg.channel.basic_ack(msg.delivery_tag)
@@ -40,9 +41,10 @@ def callback(msg):
         print("    - no acknowledgement needed")
 
     # complete
-    rslt = msg.channel.basic_cancel(msg.delivery_info['consumer_tag'])
+    rslt = msg.channel.basic_cancel(msg.delivery_info["consumer_tag"])
     print("    - basic_cancel: %r" % (rslt,))
     print("")
+
 
 #
 #   __main__
@@ -50,40 +52,42 @@ def callback(msg):
 
 # many options
 parser = ArgumentParser(description=__doc__)
+parser.add_argument("arg", help="argument to RPC function")
 parser.add_argument(
-    'arg',
-    help='argument to RPC function',
-    )
+    "--queue", dest="queue", help="queue name (default rpc_queue)", default="rpc_queue"
+)
 parser.add_argument(
-    '--queue', dest='queue',
-    help='queue name (default rpc_queue)',
-    default='rpc_queue',
-    )
+    "--host",
+    dest="host",
+    help="AMQP server to connect to (default: localhost)",
+    default="localhost",
+)
 parser.add_argument(
-    '--host', dest='host',
-    help='AMQP server to connect to (default: localhost)',
-    default='localhost',
-    )
+    "--userid",
+    dest="userid",
+    help="userid to authenticate as (default: guest)",
+    default="guest",
+)
 parser.add_argument(
-    '--userid', dest='userid',
-    help='userid to authenticate as (default: guest)',
-    default='guest',
-    )
+    "--password",
+    dest="password",
+    help="password to authenticate with (default: guest)",
+    default="guest",
+)
 parser.add_argument(
-    '--password', dest='password',
-    help='password to authenticate with (default: guest)',
-    default='guest',
-    )
-parser.add_argument(
-    '--ssl', dest='ssl', action='store_true',
-    help='enable SSL (default: not enabled)',
+    "--ssl",
+    dest="ssl",
+    action="store_true",
+    help="enable SSL (default: not enabled)",
     default=False,
-    )
+)
 parser.add_argument(
-    '--noack', dest='noack', action='store_true',
-    help='no acknowledgement needed (default: False)',
+    "--noack",
+    dest="noack",
+    action="store_true",
+    help="no acknowledgement needed (default: False)",
     default=False,
-    )
+)
 
 args = parser.parse_args()
 print("args: %r" % (args,))
@@ -94,11 +98,8 @@ while True:
     try:
         # get a connection
         connection = amqp.Connection(
-            args.host,
-            userid=args.userid,
-            password=args.password,
-            ssl=args.ssl,
-            )
+            args.host, userid=args.userid, password=args.password, ssl=args.ssl
+        )
         print("connection: %r" % (connection,))
 
         # connect the connection
@@ -118,11 +119,7 @@ while True:
         print("queue_declare: %r" % (result_queue,))
 
         # call the callback for rpc responses
-        rslt = channel.basic_consume(
-            queue_name,
-            callback=callback,
-            no_ack=args.noack,
-            )
+        rslt = channel.basic_consume(queue_name, callback=callback, no_ack=args.noack)
         print("basic_consume: %r" % (rslt,))
 
         # request/response key
@@ -132,18 +129,14 @@ while True:
         # wrap it in a message
         msg = amqp.Message(
             args.arg,
-            content_type='text/plain',
+            content_type="text/plain",
             reply_to=queue_name,
             correlation_id=correlation_id,
-            )
+        )
         print("msg: %r" % (msg,))
 
         # publish it on the channel, sending it to the exchange
-        rslt = channel.basic_publish(
-            msg,
-            exchange='',
-            routing_key=args.queue,
-            )
+        rslt = channel.basic_publish(msg, exchange="", routing_key=args.queue)
         print("basic_publish: %r" % (rslt,))
 
         # loop for incoming RPC requests, ^C to quit

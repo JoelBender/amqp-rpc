@@ -20,6 +20,8 @@ try:
 
     class ConnectionError(OSError):
         pass
+
+
 except ImportError:
     pass
 
@@ -30,30 +32,36 @@ except ImportError:
 # many options
 parser = ArgumentParser(description=__doc__)
 parser.add_argument(
-    '--queue', dest='queue',
-    help='name of the queue to delete (default: rpc_queue)',
-    default='rpc_queue',
-    )
+    "--queue",
+    dest="queue",
+    help="name of the queue to delete (default: rpc_queue)",
+    default="rpc_queue",
+)
 parser.add_argument(
-    '--host', dest='host',
-    help='AMQP server to connect to (default: localhost)',
-    default='localhost',
-    )
+    "--host",
+    dest="host",
+    help="AMQP server to connect to (default: localhost)",
+    default="localhost",
+)
 parser.add_argument(
-    '--userid', dest='userid',
-    help='userid to authenticate as (default: guest)',
-    default='guest',
-    )
+    "--userid",
+    dest="userid",
+    help="userid to authenticate as (default: guest)",
+    default="guest",
+)
 parser.add_argument(
-    '--password', dest='password',
-    help='password to authenticate with (default: guest)',
-    default='guest',
-    )
+    "--password",
+    dest="password",
+    help="password to authenticate with (default: guest)",
+    default="guest",
+)
 parser.add_argument(
-    '--ssl', dest='ssl', action='store_true',
-    help='enable SSL (default: not enabled)',
+    "--ssl",
+    dest="ssl",
+    action="store_true",
+    help="enable SSL (default: not enabled)",
     default=False,
-    )
+)
 
 args = parser.parse_args()
 print("args: %r" % (args,))
@@ -64,11 +72,8 @@ for i in range(5):
     try:
         # get a connection
         connection = amqp.Connection(
-            args.host,
-            userid=args.userid,
-            password=args.password,
-            ssl=args.ssl,
-            )
+            args.host, userid=args.userid, password=args.password, ssl=args.ssl
+        )
         print("connection: %r" % (connection,))
 
         # try to connect
